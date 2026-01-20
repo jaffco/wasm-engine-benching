@@ -72,6 +72,8 @@ target_compile_definitions(${PROJECT_NAME}
 
 # juce_add_binary_data(AudioPluginData SOURCES ...)
 
+juce_add_binary_data(AudioPluginData SOURCES media/RawGTR.wav)
+
 # `target_link_libraries` links libraries and JUCE modules to other libraries or executables. Here,
 # we're linking our executable target to the `juce::juce_audio_utils` module. Inter-module
 # dependencies are resolved automatically, so `juce_core`, `juce_events` and so on will also be
@@ -80,7 +82,7 @@ target_compile_definitions(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
-        # AudioPluginData           # If we'd created a binary data target, we'd link to it here
+        AudioPluginData           # If we'd created a binary data target, we'd link to it here
         juce::juce_audio_utils
     PUBLIC
         juce::juce_recommended_config_flags

@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <BinaryData.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -89,6 +91,19 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
     juce::ignoreUnused (sampleRate, samplesPerBlock);
+
+    // Load the embedded WAV file
+    auto* wavData = BinaryData::RawGTR_wav;
+    auto wavSize = BinaryData::RawGTR_wavSize;
+
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::AudioFormatReader> reader(wavFormat.createReaderFor(new juce::MemoryInputStream(wavData, wavSize, false), true));
+
+    if (reader != nullptr)
+    {
+        sampleBuffer.setSize(reader->numChannels, (int)reader->lengthInSamples);
+        reader->read(&sampleBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
+    }
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -150,6 +165,22 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         auto* channelData = buffer.getWritePointer (channel);
         juce::ignoreUnused (channelData);
         // ..do something to the data...
+    }
+
+    // Add looping sample playback
+    int numSamples = buffer.getNumSamples();
+    int bufferChannels = buffer.getNumChannels();
+    int sampleChannels = sampleBuffer.getNumChannels();
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        for (int channel = 0; channel < bufferChannels; ++channel)
+        {
+            float* out = buffer.getWritePointer(channel);
+            float sampleValue = sampleBuffer.getSample(channel % sampleChannels, currentPosition);
+            out[sample] += sampleValue;
+        }
+        currentPosition = (currentPosition + 1) % sampleBuffer.getNumSamples();
     }
 }
 
