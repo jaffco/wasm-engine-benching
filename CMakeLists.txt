@@ -52,6 +52,27 @@ target_sources(${PROJECT_NAME}
 # Add wasmi-daisy include directory
 target_include_directories(${PROJECT_NAME} PRIVATE include/wasmi-daisy)
 
+# Add wasm-module include directory for generated header
+target_include_directories(${PROJECT_NAME} PRIVATE wasm-module)
+
+# Custom command to build WASM module at compile time
+set(WASM_OUTPUT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/add_wasm.h)
+add_custom_command(
+    OUTPUT ${WASM_OUTPUT_HEADER}
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build-wasm.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/add.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build-wasm.sh
+    COMMENT "Building WASM module from C++ source"
+    VERBATIM
+)
+
+# Custom target to ensure WASM module is built
+add_custom_target(wasm_module ALL DEPENDS ${WASM_OUTPUT_HEADER})
+
+# Ensure WASM module is built before the plugin
+add_dependencies(${PROJECT_NAME} wasm_module)
+
 # Detect the Rust host target triple
 execute_process(
     COMMAND rustc -vV

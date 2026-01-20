@@ -3,6 +3,7 @@
 #include <BinaryData.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "wasmi_daisy.h"
+#include "add_wasm.h"  // Generated WASM bytecode header
 #include <iostream>
 
 // Memory management functions for wasmi-daisy (using standard malloc/free)
@@ -118,18 +119,14 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         reader->read(&sampleBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
     }
 
-    // WASM bytecode for add function
-    static const uint8_t wasm_add[] = {
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-        0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
-        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01,
-        0x03, 0x61, 0x64, 0x64, 0x00, 0x00, 0x0a, 0x09,
-        0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a,
-        0x0b
-    };
+    // Use WASM bytecode from generated header (built at compile time)
+    const uint8_t* wasm_add = add_wasm;
+    size_t wasm_add_size = add_wasm_len;
 
     // Demonstrate WASM engine usage
     std::cout << "=== WASM Engine Demonstration ===" << std::endl;
+    std::cout << "Using WASM module built from wasm-module/add.cpp" << std::endl;
+    std::cout << "Module size: " << wasm_add_size << " bytes" << std::endl;
 
     // Create engine
     WasmiEngine* engine = wasmi_engine_new();
@@ -149,7 +146,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     }
 
     // Load module
-    WasmiModule* module = wasmi_module_new(engine, wasm_add, sizeof(wasm_add));
+    WasmiModule* module = wasmi_module_new(engine, wasm_add, wasm_add_size);
     if (!module) {
         std::cout << "Failed to load WASM module!" << std::endl;
         wasmi_store_delete(store);
