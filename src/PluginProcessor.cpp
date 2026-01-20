@@ -32,6 +32,10 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 {
+    if (get_sample_func) wasmi_func_delete(get_sample_func);
+    if (instance) wasmi_instance_delete(instance);
+    if (store) wasmi_store_delete(store);
+    if (engine) wasmi_engine_delete(engine);
 }
 
 //==============================================================================
@@ -129,7 +133,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     std::cout << "Module size: " << wasm_add_size << " bytes" << std::endl;
 
     // Create engine
-    WasmiEngine* engine = wasmi_engine_new();
+    engine = wasmi_engine_new();
     if (!engine) {
         std::cout << "Failed to create WASM engine!" << std::endl;
         juce::JUCEApplication::quit();
@@ -137,7 +141,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     }
 
     // Create store
-    WasmiStore* store = wasmi_store_new(engine);
+    store = wasmi_store_new(engine);
     if (!store) {
         std::cout << "Failed to create WASM store!" << std::endl;
         wasmi_engine_delete(engine);
@@ -156,7 +160,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     }
 
     // Instantiate module
-    WasmiInstance* instance = wasmi_instance_new(store, module);
+    instance = wasmi_instance_new(store, module);
     if (!instance) {
         std::cout << "Failed to instantiate WASM module!" << std::endl;
         wasmi_module_delete(module);
@@ -167,49 +171,34 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     }
 
     // Get exported function
-    const char* func_name = "add";
-    WasmiFunc* add_func = wasmi_instance_get_func(
+    const char* func_name = "get_sample";
+    get_sample_func = wasmi_instance_get_func(
         store, 
         instance,
         reinterpret_cast<const uint8_t*>(func_name),
-        3  // strlen("add")
+        10  // strlen("get_sample")
     );
 
-    if (add_func) {
-        // Test values
-        int32_t a = 42;
-        int32_t b = 58;
+    if (get_sample_func) {
+        // Test the function
+        float wasm_result = wasmi_func_call_f32_to_f32(store, get_sample_func, 0.0f); // dummy arg, since no args
         
-        // Call WASM function
-        int32_t wasm_result = wasmi_func_call_i32_i32_to_i32(store, add_func, a, b);
-        
-        // Native addition for comparison
-        int32_t native_result = a + b;
-        
-        std::cout << "WASM add(" << a << ", " << b << ") = " << wasm_result << std::endl;
-        std::cout << "Native add(" << a << ", " << b << ") = " << native_result << std::endl;
-        
-        if (wasm_result == native_result) {
-            std::cout << "✅ Results match! WASM engine working correctly." << std::endl;
-        } else {
-            std::cout << "❌ Results don't match! WASM engine error." << std::endl;
-        }
-        
-        wasmi_func_delete(add_func);
+        std::cout << "WASM get_sample() = " << wasm_result << std::endl;
+        std::cout << "✅ WASM sine oscillator loaded successfully." << std::endl;
     } else {
         std::cout << "Failed to get WASM function!" << std::endl;
+        wasmi_instance_delete(instance);
+        wasmi_module_delete(module);
+        wasmi_store_delete(store);
+        wasmi_engine_delete(engine);
+        juce::JUCEApplication::quit();
+        return;
     }
 
-    // Cleanup
-    wasmi_instance_delete(instance);
+    // Cleanup module (instance keeps it alive)
     wasmi_module_delete(module);
-    wasmi_store_delete(store);
-    wasmi_engine_delete(engine);
 
-    std::cout << "=== Demonstration Complete ===" << std::endl;
-    
-    // Quit the application
-    juce::JUCEApplication::quit();
+    std::cout << "=== WASM Loaded for Audio Processing ===" << std::endl;
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -280,11 +269,17 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
+        // Get sine sample from WASM
+        float sine_sample = 0.0f;
+        if (get_sample_func) {
+            sine_sample = wasmi_func_call_f32_to_f32(store, get_sample_func, 0.0f);
+        }
+
         for (int channel = 0; channel < bufferChannels; ++channel)
         {
             float* out = buffer.getWritePointer(channel);
-            float sampleValue = sampleBuffer.getSample(channel % sampleChannels, currentPosition);
-            out[sample] += sampleValue;
+            float sampleValue = sampleBuffer.getSample(channel % sampleChannels, currentPosition) * 0.f;
+            out[sample] += sampleValue + sine_sample * 0.2f;  // Add sine with low volume
         }
         currentPosition = (currentPosition + 1) % sampleBuffer.getNumSamples();
     }

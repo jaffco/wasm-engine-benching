@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "wasmi_daisy.h"
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -45,6 +46,13 @@ public:
 private:
     //==============================================================================
     juce::AudioBuffer<float> sampleBuffer;
-    int currentPosition = 0;   
+    int currentPosition = 0;
+
+    // WASM engine components
+    WasmiEngine* engine = nullptr;
+    WasmiStore* store = nullptr;
+    WasmiInstance* instance = nullptr;
+    WasmiFunc* get_sample_func = nullptr;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };
