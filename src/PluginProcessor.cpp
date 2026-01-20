@@ -4,8 +4,8 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "wamr_aot_wrapper.h"
 #include "wasm2c_wrapper.h"
-#include "add_aot.h"  // Generated AOT bytecode header
-#include "add_wasm.h"  // Generated WASM bytecode header
+#include "module_aot.h"  // Generated AOT bytecode header
+#include "module_wasm.h"  // Generated WASM bytecode header
 #include <iostream>
 #include <chrono>
 
@@ -149,10 +149,10 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     }
 
     // Get bytecode for all engines
-    const uint8_t* aot_bytes = add_aot;
-    size_t aot_size = add_aot_len;
-    const uint8_t* wasm_bytes = add_wasm;
-    size_t wasm_size = add_wasm_len;
+    const uint8_t* aot_bytes = module_aot;
+    size_t aot_size = module_aot_len;
+    const uint8_t* wasm_bytes = module_wasm;
+    size_t wasm_size = module_wasm_len;
     
     std::cout << "\nModule sizes:" << std::endl;
     std::cout << "  WASM: " << wasm_size << " bytes" << std::endl;

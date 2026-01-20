@@ -53,7 +53,7 @@ target_sources(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PRIVATE include/wasmi-daisy)
 
 # Add wasm-module include directory for generated header
-target_include_directories(${PROJECT_NAME} PRIVATE wasm-module)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build)
 
 # Custom command to build wamrc AOT compiler
 set(WAMRC_EXECUTABLE ${CMAKE_BINARY_DIR}/wamrc)
@@ -70,22 +70,24 @@ add_custom_command(
 add_custom_target(wamrc_tool ALL DEPENDS ${WAMRC_EXECUTABLE})
 
 # Add wasm-module include directory for generated header
-target_include_directories(${PROJECT_NAME} PRIVATE wasm-module)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build)
 
 # Custom command to build WASM module at compile time
-set(WASM_OUTPUT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/add_wasm.h)
+set(WASM_OUTPUT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build/module_wasm.h)
+set(WASM2C_GENERATED_C ${CMAKE_BINARY_DIR}/module.c)
+set(WASM2C_GENERATED_H ${CMAKE_BINARY_DIR}/module.h)
 add_custom_command(
-    OUTPUT ${WASM_OUTPUT_HEADER}
+    OUTPUT ${WASM_OUTPUT_HEADER} ${WASM2C_GENERATED_C} ${WASM2C_GENERATED_H}
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build-wasm.sh
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/add.cpp
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/module.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/build-wasm.sh
-    COMMENT "Building WASM module from C++ source"
+    COMMENT "Building WASM module and converting to C using wasm2c"
     VERBATIM
 )
 
 # Custom target to ensure WASM module is built
-add_custom_target(wasm_module ALL DEPENDS ${WASM_OUTPUT_HEADER})
+add_custom_target(wasm_module ALL DEPENDS ${WASM_OUTPUT_HEADER} ${WASM2C_GENERATED_C} ${WASM2C_GENERATED_H})
 
 # Ensure wamrc is built before WASM module
 add_dependencies(wasm_module wamrc_tool)
@@ -213,18 +215,6 @@ target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wamr_aot)
 target_link_libraries(${PROJECT_NAME}_AU PRIVATE wamr_aot)
 
 # WASM2C Integration
-set(WASM2C_GENERATED_C ${CMAKE_BINARY_DIR}/add.c)
-set(WASM2C_GENERATED_H ${CMAKE_BINARY_DIR}/add.h)
-
-# Custom command to convert WASM to C using wasm2c
-add_custom_command(
-    OUTPUT ${WASM2C_GENERATED_C} ${WASM2C_GENERATED_H}
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/build-wasm2c.sh
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS ${WASM_OUTPUT_HEADER}
-    COMMENT "Converting WASM to C using wasm2c"
-    VERBATIM
-)
 
 # Build wasm2c runtime library
 set(WASM2C_RUNTIME_SOURCES

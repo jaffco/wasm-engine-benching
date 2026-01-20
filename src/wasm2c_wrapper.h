@@ -5,10 +5,10 @@ extern "C" {
 #endif
 
 // Forward declare the generated wasm2c module struct
-struct w2c_add;
+struct w2c_module;
 
 typedef struct {
-    struct w2c_add* instance;
+    struct w2c_module* instance;
 } Wasm2cEngine;
 
 Wasm2cEngine* wasm2c_engine_new(void);

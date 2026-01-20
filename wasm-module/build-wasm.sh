@@ -1,13 +1,16 @@
 #!/bin/bash
 
+# Create local build directory
+mkdir -p build
+
 # Create a temporary wrapper to force C linkage without modifying source
-cat > /tmp/add_wrapper.cpp << 'EOF'
-#include "add.cpp"
+cat > build/module_wrapper.cpp << 'EOF'
+#include "module.cpp"
 EOF
 
 # Compile C++ to WebAssembly with exported functions
 # The wrapper provides extern "C" linkage without modifying the original source
-emcc /tmp/add_wrapper.cpp -O2 -o add.wasm \
+emcc build/module_wrapper.cpp -O2 -o build/module.wasm \
   -I. \
   -sSTANDALONE_WASM \
   -sEXPORTED_RUNTIME_METHODS=[] \
@@ -15,7 +18,7 @@ emcc /tmp/add_wrapper.cpp -O2 -o add.wasm \
   --no-entry
 
 # Convert WASM binary to C header array
-xxd -i add.wasm > add_wasm.h
+xxd -i -n module_wasm build/module.wasm > build/module_wasm.h
 
 # Build AOT file using wamrc (if available)
 if [ -f "../build/wamrc" ]; then
@@ -27,16 +30,21 @@ if [ -f "../build/wamrc" ]; then
     else
         TARGET="x86_64"
     fi
-    ../build/wamrc --target=$TARGET -o add.aot add.wasm
-    xxd -i add.aot > add_aot.h
-    echo "✓ Built AOT file for $TARGET and generated add_aot.h"
+    ../build/wamrc --target=$TARGET -o build/module.aot build/module.wasm
+    xxd -i -n module_aot build/module.aot > build/module_aot.h
+    echo "✓ Built AOT file for $TARGET and generated module_aot.h"
 else
     echo "⚠ wamrc not found, skipping AOT build"
 fi
 
-# Cleanup
-rm /tmp/add_wrapper.cpp
-rm add.wasm
+# Convert WASM to C using wasm2c (if available)
+if command -v wasm2c >/dev/null 2>&1; then
+    echo "Converting build/module.wasm to C using wasm2c..."
+    wasm2c build/module.wasm -o ../build/module.c
+    echo "✓ Generated ../build/module.c and ../build/module.h"
+else
+    echo "⚠ wasm2c not found, skipping wasm2c conversion"
+fi
 
-echo "✓ Built WASM file and generated add_wasm.h"
+echo "✓ Built WASM file and generated module_wasm.h"
 echo "✓ Function 'get_sample' exported with C linkage"
