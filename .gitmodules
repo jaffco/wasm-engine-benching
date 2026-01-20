@@ -1,3 +1,6 @@
 [submodule "include/JUCE"]
 	path = include/JUCE
 	url = https://github.com/juce-framework/JUCE
+[submodule "include/wasmi-daisy"]
+	path = include/wasmi-daisy
+	url = https://github.com/jaffco/wasmi-daisy

@@ -2,6 +2,19 @@
 #include "PluginEditor.h"
 #include <BinaryData.h>
 #include <juce_audio_formats/juce_audio_formats.h>
+#include "wasmi_daisy.h"
+#include <iostream>
+
+// Memory management functions for wasmi-daisy (using standard malloc/free)
+extern "C" {
+    void* jaffx_sdram_malloc(size_t size) {
+        return malloc(size);
+    }
+    
+    void jaffx_sdram_free(void* ptr) {
+        free(ptr);
+    }
+}
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -104,6 +117,102 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         sampleBuffer.setSize(reader->numChannels, (int)reader->lengthInSamples);
         reader->read(&sampleBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
     }
+
+    // WASM bytecode for add function
+    static const uint8_t wasm_add[] = {
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01,
+        0x03, 0x61, 0x64, 0x64, 0x00, 0x00, 0x0a, 0x09,
+        0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a,
+        0x0b
+    };
+
+    // Demonstrate WASM engine usage
+    std::cout << "=== WASM Engine Demonstration ===" << std::endl;
+
+    // Create engine
+    WasmiEngine* engine = wasmi_engine_new();
+    if (!engine) {
+        std::cout << "Failed to create WASM engine!" << std::endl;
+        juce::JUCEApplication::quit();
+        return;
+    }
+
+    // Create store
+    WasmiStore* store = wasmi_store_new(engine);
+    if (!store) {
+        std::cout << "Failed to create WASM store!" << std::endl;
+        wasmi_engine_delete(engine);
+        juce::JUCEApplication::quit();
+        return;
+    }
+
+    // Load module
+    WasmiModule* module = wasmi_module_new(engine, wasm_add, sizeof(wasm_add));
+    if (!module) {
+        std::cout << "Failed to load WASM module!" << std::endl;
+        wasmi_store_delete(store);
+        wasmi_engine_delete(engine);
+        juce::JUCEApplication::quit();
+        return;
+    }
+
+    // Instantiate module
+    WasmiInstance* instance = wasmi_instance_new(store, module);
+    if (!instance) {
+        std::cout << "Failed to instantiate WASM module!" << std::endl;
+        wasmi_module_delete(module);
+        wasmi_store_delete(store);
+        wasmi_engine_delete(engine);
+        juce::JUCEApplication::quit();
+        return;
+    }
+
+    // Get exported function
+    const char* func_name = "add";
+    WasmiFunc* add_func = wasmi_instance_get_func(
+        store, 
+        instance,
+        reinterpret_cast<const uint8_t*>(func_name),
+        3  // strlen("add")
+    );
+
+    if (add_func) {
+        // Test values
+        int32_t a = 42;
+        int32_t b = 58;
+        
+        // Call WASM function
+        int32_t wasm_result = wasmi_func_call_i32_i32_to_i32(store, add_func, a, b);
+        
+        // Native addition for comparison
+        int32_t native_result = a + b;
+        
+        std::cout << "WASM add(" << a << ", " << b << ") = " << wasm_result << std::endl;
+        std::cout << "Native add(" << a << ", " << b << ") = " << native_result << std::endl;
+        
+        if (wasm_result == native_result) {
+            std::cout << "✅ Results match! WASM engine working correctly." << std::endl;
+        } else {
+            std::cout << "❌ Results don't match! WASM engine error." << std::endl;
+        }
+        
+        wasmi_func_delete(add_func);
+    } else {
+        std::cout << "Failed to get WASM function!" << std::endl;
+    }
+
+    // Cleanup
+    wasmi_instance_delete(instance);
+    wasmi_module_delete(module);
+    wasmi_store_delete(store);
+    wasmi_engine_delete(engine);
+
+    std::cout << "=== Demonstration Complete ===" << std::endl;
+    
+    // Quit the application
+    juce::JUCEApplication::quit();
 }
 
 void AudioPluginAudioProcessor::releaseResources()

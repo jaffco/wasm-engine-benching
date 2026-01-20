@@ -49,6 +49,40 @@ target_sources(${PROJECT_NAME}
         src/PluginEditor.cpp
         src/PluginProcessor.cpp)
 
+# Add wasmi-daisy include directory
+target_include_directories(${PROJECT_NAME} PRIVATE include/wasmi-daisy)
+
+# Detect the Rust host target triple
+execute_process(
+    COMMAND rustc -vV
+    OUTPUT_VARIABLE RUSTC_VERSION_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(REGEX MATCH "host: ([a-zA-Z0-9_\\-]+)" _ ${RUSTC_VERSION_OUTPUT})
+set(RUST_HOST_TARGET ${CMAKE_MATCH_1})
+message(STATUS "Detected Rust host target: ${RUST_HOST_TARGET}")
+
+# Set the wasmi-daisy library path based on host target
+set(WASMI_DAISY_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/include/wasmi-daisy/target/${RUST_HOST_TARGET}/release/libwasmi_daisy.a)
+
+# Custom command to build wasmi-daisy library
+add_custom_command(
+    OUTPUT ${WASMI_DAISY_LIB_PATH}
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/include/wasmi-daisy/build.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/wasmi-daisy
+    COMMENT "Building wasmi-daisy WASM interpreter library for ${RUST_HOST_TARGET}"
+)
+
+# Custom target to ensure the library is built
+add_custom_target(wasmi_daisy_lib ALL DEPENDS ${WASMI_DAISY_LIB_PATH})
+
+# Create an imported library target for wasmi-daisy
+add_library(wasmi_daisy STATIC IMPORTED GLOBAL)
+set_target_properties(wasmi_daisy PROPERTIES
+    IMPORTED_LOCATION ${WASMI_DAISY_LIB_PATH}
+)
+add_dependencies(wasmi_daisy wasmi_daisy_lib)
+
 # `target_compile_definitions` adds some preprocessor definitions to our target. In a Projucer
 # project, these might be passed in the 'Preprocessor Definitions' field. JUCE modules also make use
 # of compile definitions to switch certain features on/off, so if there's a particular feature you
@@ -84,7 +118,16 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         AudioPluginData           # If we'd created a binary data target, we'd link to it here
         juce::juce_audio_utils
+        wasmi_daisy
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# Ensure wasmi-daisy library is built before linking
+add_dependencies(${PROJECT_NAME} wasmi_daisy)
+
+# Link wasmi_daisy to plugin targets
+target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE wasmi_daisy)
+target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wasmi_daisy)
+target_link_libraries(${PROJECT_NAME}_AU PRIVATE wasmi_daisy)

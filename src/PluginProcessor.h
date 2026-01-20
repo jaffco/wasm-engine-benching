@@ -45,6 +45,6 @@ public:
 private:
     //==============================================================================
     juce::AudioBuffer<float> sampleBuffer;
-    int currentPosition = 0;
+    int currentPosition = 0;   
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };
