@@ -55,6 +55,23 @@ target_include_directories(${PROJECT_NAME} PRIVATE include/wasmi-daisy)
 # Add wasm-module include directory for generated header
 target_include_directories(${PROJECT_NAME} PRIVATE wasm-module)
 
+# Custom command to build wamrc AOT compiler
+set(WAMRC_EXECUTABLE ${CMAKE_BINARY_DIR}/wamrc)
+add_custom_command(
+    OUTPUT ${WAMRC_EXECUTABLE}
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/build-wamrc.sh
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/include/wamr/wamr-compiler/build/wamrc-2.4.3 ${WAMRC_EXECUTABLE}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Building wamrc AOT compiler"
+    VERBATIM
+)
+
+# Custom target for wamrc
+add_custom_target(wamrc_tool ALL DEPENDS ${WAMRC_EXECUTABLE})
+
+# Add wasm-module include directory for generated header
+target_include_directories(${PROJECT_NAME} PRIVATE wasm-module)
+
 # Custom command to build WASM module at compile time
 set(WASM_OUTPUT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/wasm-module/add_wasm.h)
 add_custom_command(
@@ -69,6 +86,9 @@ add_custom_command(
 
 # Custom target to ensure WASM module is built
 add_custom_target(wasm_module ALL DEPENDS ${WASM_OUTPUT_HEADER})
+
+# Ensure wamrc is built before WASM module
+add_dependencies(wasm_module wamrc_tool)
 
 # Ensure WASM module is built before the plugin
 add_dependencies(${PROJECT_NAME} wasm_module)
@@ -139,7 +159,6 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         AudioPluginData           # If we'd created a binary data target, we'd link to it here
         juce::juce_audio_utils
-        wasmi_daisy
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -148,7 +167,35 @@ target_link_libraries(${PROJECT_NAME}
 # Ensure wasmi-daisy library is built before linking
 add_dependencies(${PROJECT_NAME} wasmi_daisy)
 
-# Link wasmi_daisy to plugin targets
-target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE wasmi_daisy)
-target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wasmi_daisy)
-target_link_libraries(${PROJECT_NAME}_AU PRIVATE wasmi_daisy)
+# WAMR AOT Integration
+set(WAMR_AOT_LIB_PATH ${CMAKE_BINARY_DIR}/libwamr_aot.a)
+
+# Custom command to build WAMR AOT library
+add_custom_command(
+    OUTPUT ${WAMR_AOT_LIB_PATH}
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build-wamr-aot.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Building WAMR AOT runtime library"
+)
+
+# Custom target to ensure the library is built
+add_custom_target(wamr_aot_lib ALL DEPENDS ${WAMR_AOT_LIB_PATH})
+
+# Create an imported library target for WAMR AOT
+add_library(wamr_aot STATIC IMPORTED GLOBAL)
+set_target_properties(wamr_aot PROPERTIES
+    IMPORTED_LOCATION ${WAMR_AOT_LIB_PATH}
+)
+add_dependencies(wamr_aot wamr_aot_lib)
+
+# Add WAMR AOT include directory
+target_include_directories(${PROJECT_NAME} PRIVATE include)
+target_include_directories(${PROJECT_NAME} PRIVATE include/wamr/core/iwasm/include)
+
+# Add WAMR AOT wrapper source
+target_sources(${PROJECT_NAME} PRIVATE src/wamr_aot_wrapper.c)
+
+# Link WAMR AOT to plugin targets
+target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE wamr_aot)
+target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wamr_aot)
+target_link_libraries(${PROJECT_NAME}_AU PRIVATE wamr_aot)

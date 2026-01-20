@@ -4,3 +4,6 @@
 [submodule "include/wasmi-daisy"]
 	path = include/wasmi-daisy
 	url = https://github.com/jaffco/wasmi-daisy
+[submodule "include/wamr"]
+	path = include/wamr
+	url = https://github.com/jaffco/wasm-micro-runtime

@@ -2,20 +2,9 @@
 #include "PluginEditor.h"
 #include <BinaryData.h>
 #include <juce_audio_formats/juce_audio_formats.h>
-#include "wasmi_daisy.h"
-#include "add_wasm.h"  // Generated WASM bytecode header
+#include "wamr_aot_wrapper.h"
+#include "add_aot.h"  // Generated AOT bytecode header
 #include <iostream>
-
-// Memory management functions for wasmi-daisy (using standard malloc/free)
-extern "C" {
-    void* jaffx_sdram_malloc(size_t size) {
-        return malloc(size);
-    }
-    
-    void jaffx_sdram_free(void* ptr) {
-        free(ptr);
-    }
-}
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -32,10 +21,7 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 {
-    if (get_sample_func) wasmi_func_delete(get_sample_func);
-    if (instance) wasmi_instance_delete(instance);
-    if (store) wasmi_store_delete(store);
-    if (engine) wasmi_engine_delete(engine);
+    if (wamrEngine) wamr_aot_engine_delete(wamrEngine);
 }
 
 //==============================================================================
@@ -108,97 +94,64 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
+    std::cout << "\n=== prepareToPlay called ===" << std::endl;
+    std::cout << "Sample Rate: " << sampleRate << " Hz" << std::endl;
+    std::cout << "Samples Per Block: " << samplesPerBlock << std::endl;
     juce::ignoreUnused (sampleRate, samplesPerBlock);
 
     // Load the embedded WAV file
     auto* wavData = BinaryData::RawGTR_wav;
     auto wavSize = BinaryData::RawGTR_wavSize;
+    std::cout << "WAV Data pointer: " << (void*)wavData << ", size: " << wavSize << std::endl;
 
     juce::WavAudioFormat wavFormat;
     std::unique_ptr<juce::AudioFormatReader> reader(wavFormat.createReaderFor(new juce::MemoryInputStream(wavData, wavSize, false), true));
 
     if (reader != nullptr)
     {
+        std::cout << "WAV Reader created: channels=" << reader->numChannels 
+                  << ", samples=" << reader->lengthInSamples << std::endl;
         sampleBuffer.setSize(reader->numChannels, (int)reader->lengthInSamples);
         reader->read(&sampleBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
+        std::cout << "Sample buffer loaded successfully" << std::endl;
+    }
+    else
+    {
+        std::cout << "ERROR: Failed to create WAV reader!" << std::endl;
     }
 
-    // Use WASM bytecode from generated header (built at compile time)
-    const uint8_t* wasm_add = add_wasm;
-    size_t wasm_add_size = add_wasm_len;
+    // Use AOT bytecode from generated header (built at compile time)
+    const uint8_t* aot_add = add_aot;
+    size_t aot_add_size = add_aot_len;
 
-    // Demonstrate WASM engine usage
-    std::cout << "=== WASM Engine Demonstration ===" << std::endl;
-    std::cout << "Using WASM module built from wasm-module/add.cpp" << std::endl;
-    std::cout << "Module size: " << wasm_add_size << " bytes" << std::endl;
+    // Demonstrate WAMR AOT engine usage
+    std::cout << "=== WAMR AOT Engine Demonstration ===" << std::endl;
+    std::cout << "Using AOT module built from wasm-module/add.cpp" << std::endl;
+    std::cout << "Module size: " << aot_add_size << " bytes" << std::endl;
 
-    // Create engine
-    engine = wasmi_engine_new();
-    if (!engine) {
-        std::cout << "Failed to create WASM engine!" << std::endl;
+    // Create WAMR AOT engine
+    wamrEngine = wamr_aot_engine_new();
+    if (!wamrEngine) {
+        std::cout << "Failed to create WAMR AOT engine!" << std::endl;
         juce::JUCEApplication::quit();
         return;
     }
 
-    // Create store
-    store = wasmi_store_new(engine);
-    if (!store) {
-        std::cout << "Failed to create WASM store!" << std::endl;
-        wasmi_engine_delete(engine);
+    // Load AOT module
+    if (!wamr_aot_engine_load_module(wamrEngine, aot_add, aot_add_size)) {
+        std::cout << "Failed to load AOT module!" << std::endl;
+        wamr_aot_engine_delete(wamrEngine);
+        wamrEngine = nullptr;
         juce::JUCEApplication::quit();
         return;
     }
 
-    // Load module
-    WasmiModule* module = wasmi_module_new(engine, wasm_add, wasm_add_size);
-    if (!module) {
-        std::cout << "Failed to load WASM module!" << std::endl;
-        wasmi_store_delete(store);
-        wasmi_engine_delete(engine);
-        juce::JUCEApplication::quit();
-        return;
-    }
+    // Test the function
+    float aot_result = wamr_aot_engine_get_sample(wamrEngine);
+    std::cout << "AOT get_sample() = " << aot_result << std::endl;
+    std::cout << "✅ WAMR AOT sine oscillator loaded successfully." << std::endl;
 
-    // Instantiate module
-    instance = wasmi_instance_new(store, module);
-    if (!instance) {
-        std::cout << "Failed to instantiate WASM module!" << std::endl;
-        wasmi_module_delete(module);
-        wasmi_store_delete(store);
-        wasmi_engine_delete(engine);
-        juce::JUCEApplication::quit();
-        return;
-    }
-
-    // Get exported function
-    const char* func_name = "get_sample";
-    get_sample_func = wasmi_instance_get_func(
-        store, 
-        instance,
-        reinterpret_cast<const uint8_t*>(func_name),
-        10  // strlen("get_sample")
-    );
-
-    if (get_sample_func) {
-        // Test the function
-        float wasm_result = wasmi_func_call_f32_to_f32(store, get_sample_func, 0.0f); // dummy arg, since no args
-        
-        std::cout << "WASM get_sample() = " << wasm_result << std::endl;
-        std::cout << "✅ WASM sine oscillator loaded successfully." << std::endl;
-    } else {
-        std::cout << "Failed to get WASM function!" << std::endl;
-        wasmi_instance_delete(instance);
-        wasmi_module_delete(module);
-        wasmi_store_delete(store);
-        wasmi_engine_delete(engine);
-        juce::JUCEApplication::quit();
-        return;
-    }
-
-    // Cleanup module (instance keeps it alive)
-    wasmi_module_delete(module);
-
-    std::cout << "=== WASM Loaded for Audio Processing ===" << std::endl;
+    std::cout << "=== WAMR AOT Loaded for Audio Processing ===" << std::endl;
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -234,6 +187,18 @@ bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layou
 void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
+    static int callCount = 0;
+    static bool firstCall = true;
+    
+    if (firstCall) {
+        std::cout << "\n=== First processBlock call ===" << std::endl;
+        std::cout << "Buffer size: " << buffer.getNumSamples() << " samples" << std::endl;
+        std::cout << "Num channels: " << buffer.getNumChannels() << std::endl;
+        std::cout << "wamrEngine pointer: " << (void*)wamrEngine << std::endl;
+        std::cout << "Sample buffer size: " << sampleBuffer.getNumSamples() << std::endl;
+        firstCall = false;
+    }
+    
     juce::ignoreUnused (midiMessages);
 
     juce::ScopedNoDenormals noDenormals;
@@ -267,19 +232,36 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     int bufferChannels = buffer.getNumChannels();
     int sampleChannels = sampleBuffer.getNumChannels();
 
+    static int sampleDebugCount = 0;
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        // Get sine sample from WASM
+        // Get sine sample from WAMR AOT
         float sine_sample = 0.0f;
-        if (get_sample_func) {
-            sine_sample = wasmi_func_call_f32_to_f32(store, get_sample_func, 0.0f);
+        if (wamrEngine) {
+            sine_sample = wamr_aot_engine_get_sample(wamrEngine);
+            
+            // Debug first few samples
+            if (sampleDebugCount < 5) {
+                std::cout << "Sample " << sampleDebugCount << ": sine_sample = " << sine_sample << std::endl;
+                sampleDebugCount++;
+            }
+        } else if (sampleDebugCount < 1) {
+            std::cout << "WARNING: wamrEngine is null in processBlock!" << std::endl;
+            sampleDebugCount++;
         }
 
         for (int channel = 0; channel < bufferChannels; ++channel)
         {
             float* out = buffer.getWritePointer(channel);
             float sampleValue = sampleBuffer.getSample(channel % sampleChannels, currentPosition) * 0.f;
-            out[sample] += sampleValue + sine_sample * 0.2f;  // Add sine with low volume
+            float finalSample = sampleValue + sine_sample * 0.2f;
+            
+            // Debug first few output samples
+            if (sampleDebugCount <= 5 && sample == 0 && channel == 0) {
+                std::cout << "  Output sample = " << finalSample << " (sine * 0.2 = " << (sine_sample * 0.2f) << ")" << std::endl;
+            }
+            
+            out[sample] += finalSample;  // Add sine with low volume
         }
         currentPosition = (currentPosition + 1) % sampleBuffer.getNumSamples();
     }
