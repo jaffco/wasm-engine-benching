@@ -167,6 +167,18 @@ target_link_libraries(${PROJECT_NAME}
 # Ensure wasmi-daisy library is built before linking
 add_dependencies(${PROJECT_NAME} wasmi_daisy)
 
+# Link wasmi-daisy to plugin targets
+target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE wasmi_daisy)
+target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wasmi_daisy)
+target_link_libraries(${PROJECT_NAME}_AU PRIVATE wasmi_daisy)
+
+# Rust libraries may need system libraries on macOS
+if(APPLE)
+    target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE "-framework Security" "-framework Foundation")
+    target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE "-framework Security" "-framework Foundation")
+    target_link_libraries(${PROJECT_NAME}_AU PRIVATE "-framework Security" "-framework Foundation")
+endif()
+
 # WAMR AOT Integration
 set(WAMR_AOT_LIB_PATH ${CMAKE_BINARY_DIR}/libwamr_aot.a)
 
@@ -199,3 +211,71 @@ target_sources(${PROJECT_NAME} PRIVATE src/wamr_aot_wrapper.c)
 target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE wamr_aot)
 target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wamr_aot)
 target_link_libraries(${PROJECT_NAME}_AU PRIVATE wamr_aot)
+
+# WASM2C Integration
+set(WASM2C_GENERATED_C ${CMAKE_BINARY_DIR}/add.c)
+set(WASM2C_GENERATED_H ${CMAKE_BINARY_DIR}/add.h)
+
+# Custom command to convert WASM to C using wasm2c
+add_custom_command(
+    OUTPUT ${WASM2C_GENERATED_C} ${WASM2C_GENERATED_H}
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/build-wasm2c.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS ${WASM_OUTPUT_HEADER}
+    COMMENT "Converting WASM to C using wasm2c"
+    VERBATIM
+)
+
+# Build wasm2c runtime library
+set(WASM2C_RUNTIME_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/src/wasm-rt-impl.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/src/wasm-rt-mem-impl.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/src/wasm-rt-exceptions-impl.c
+)
+
+add_library(wasm2c_runtime STATIC ${WASM2C_RUNTIME_SOURCES})
+target_include_directories(wasm2c_runtime PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/example
+)
+# Add compiler definitions needed for wasm2c runtime
+target_compile_definitions(wasm2c_runtime PRIVATE
+    WASM_RT_MEMCHECK_SIGNAL_HANDLER=0
+    WASM_RT_MEMCHECK_SIGNAL_HANDLER_POSIX=0
+)
+# Include the compatibility header before all other headers
+target_compile_options(wasm2c_runtime PRIVATE 
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/example/wasm-rt-compat.h
+)
+# Disable strict warnings for third-party code
+if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(wasm2c_runtime PRIVATE 
+        -Wno-implicit-function-declaration
+        -Wno-int-conversion
+    )
+endif()
+
+# Add generated C file to the build
+add_library(wasm2c_module STATIC ${WASM2C_GENERATED_C})
+target_include_directories(wasm2c_module PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/include
+    ${CMAKE_BINARY_DIR}
+)
+target_link_libraries(wasm2c_module PUBLIC wasm2c_runtime)
+
+# Add wasm2c wrapper source
+target_sources(${PROJECT_NAME} PRIVATE src/wasm2c_wrapper.c)
+
+# Add wasm2c include directories
+target_include_directories(${PROJECT_NAME} PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/wasm2c-runtime/include
+    ${CMAKE_BINARY_DIR}
+)
+
+# Link wasm2c to plugin targets
+target_link_libraries(${PROJECT_NAME}_Standalone PRIVATE wasm2c_runtime wasm2c_module)
+target_link_libraries(${PROJECT_NAME}_VST3 PRIVATE wasm2c_runtime wasm2c_module)
+target_link_libraries(${PROJECT_NAME}_AU PRIVATE wasm2c_runtime wasm2c_module)
+
+# Ensure wasm2c module is built after wasm module
+add_dependencies(wasm2c_module wasm_module)

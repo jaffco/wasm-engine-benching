@@ -3,8 +3,25 @@
 #include <BinaryData.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "wamr_aot_wrapper.h"
+#include "wasm2c_wrapper.h"
 #include "add_aot.h"  // Generated AOT bytecode header
+#include "add_wasm.h"  // Generated WASM bytecode header
 #include <iostream>
+#include <chrono>
+
+// Wasmi C API
+extern "C" {
+    #include "wasmi_daisy.h"
+    
+    // Memory allocation functions required by wasmi-daisy
+    void* jaffx_sdram_malloc(size_t size) {
+        return malloc(size);
+    }
+    
+    void jaffx_sdram_free(void* ptr) {
+        free(ptr);
+    }
+}
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -21,7 +38,18 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 {
+    // Cleanup WAMR
     if (wamrEngine) wamr_aot_engine_delete(wamrEngine);
+    
+    // Cleanup wasm2c
+    if (wasm2cEngine) wasm2c_engine_delete(wasm2cEngine);
+    
+    // Cleanup wasmi
+    if (wasmiFunc) wasmi_func_delete(wasmiFunc);
+    if (wasmiInstance) wasmi_instance_delete(wasmiInstance);
+    if (wasmiModule) wasmi_module_delete(wasmiModule);
+    if (wasmiStore) wasmi_store_delete(wasmiStore);
+    if (wasmiEngine) wasmi_engine_delete(wasmiEngine);
 }
 
 //==============================================================================
@@ -92,66 +120,192 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 //==============================================================================
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    std::cout << "\n=== prepareToPlay called ===" << std::endl;
+    std::cout << "\n╔══════════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║        WASM Engine Benchmarking Suite                       ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
     std::cout << "Sample Rate: " << sampleRate << " Hz" << std::endl;
     std::cout << "Samples Per Block: " << samplesPerBlock << std::endl;
+    std::cout << std::endl;
+    
     juce::ignoreUnused (sampleRate, samplesPerBlock);
 
     // Load the embedded WAV file
     auto* wavData = BinaryData::RawGTR_wav;
     auto wavSize = BinaryData::RawGTR_wavSize;
-    std::cout << "WAV Data pointer: " << (void*)wavData << ", size: " << wavSize << std::endl;
 
     juce::WavAudioFormat wavFormat;
     std::unique_ptr<juce::AudioFormatReader> reader(wavFormat.createReaderFor(new juce::MemoryInputStream(wavData, wavSize, false), true));
 
     if (reader != nullptr)
     {
-        std::cout << "WAV Reader created: channels=" << reader->numChannels 
-                  << ", samples=" << reader->lengthInSamples << std::endl;
         sampleBuffer.setSize(reader->numChannels, (int)reader->lengthInSamples);
         reader->read(&sampleBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
-        std::cout << "Sample buffer loaded successfully" << std::endl;
+        std::cout << "✓ Audio sample loaded: " << reader->numChannels 
+                  << " channels, " << reader->lengthInSamples << " samples" << std::endl;
     }
     else
     {
-        std::cout << "ERROR: Failed to create WAV reader!" << std::endl;
+        std::cout << "✗ ERROR: Failed to load audio sample!" << std::endl;
     }
 
-    // Use AOT bytecode from generated header (built at compile time)
-    const uint8_t* aot_add = add_aot;
-    size_t aot_add_size = add_aot_len;
+    // Get bytecode for all engines
+    const uint8_t* aot_bytes = add_aot;
+    size_t aot_size = add_aot_len;
+    const uint8_t* wasm_bytes = add_wasm;
+    size_t wasm_size = add_wasm_len;
+    
+    std::cout << "\nModule sizes:" << std::endl;
+    std::cout << "  WASM: " << wasm_size << " bytes" << std::endl;
+    std::cout << "  AOT:  " << aot_size << " bytes" << std::endl;
+    std::cout << std::endl;
 
-    // Demonstrate WAMR AOT engine usage
-    std::cout << "=== WAMR AOT Engine Demonstration ===" << std::endl;
-    std::cout << "Using AOT module built from wasm-module/add.cpp" << std::endl;
-    std::cout << "Module size: " << aot_add_size << " bytes" << std::endl;
-
-    // Create WAMR AOT engine
+    // ========================================================================
+    // BENCHMARK 1: WAMR AOT Engine
+    // ========================================================================
+    std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
+    std::cout << "  Engine 1: WAMR AOT (Ahead-of-Time Compilation)" << std::endl;
+    std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
+    
+    auto wamr_start = std::chrono::high_resolution_clock::now();
+    
     wamrEngine = wamr_aot_engine_new();
     if (!wamrEngine) {
-        std::cout << "Failed to create WAMR AOT engine!" << std::endl;
-        juce::JUCEApplication::quit();
-        return;
-    }
-
-    // Load AOT module
-    if (!wamr_aot_engine_load_module(wamrEngine, aot_add, aot_add_size)) {
-        std::cout << "Failed to load AOT module!" << std::endl;
+        std::cout << "✗ Failed to create WAMR engine" << std::endl;
+    } else if (!wamr_aot_engine_load_module(wamrEngine, aot_bytes, aot_size)) {
+        std::cout << "✗ Failed to load WAMR module" << std::endl;
         wamr_aot_engine_delete(wamrEngine);
         wamrEngine = nullptr;
-        juce::JUCEApplication::quit();
-        return;
+    } else {
+        auto wamr_load = std::chrono::high_resolution_clock::now();
+        auto wamr_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wamr_load - wamr_start).count();
+        
+        // Test execution
+        float wamr_result = wamr_aot_engine_get_sample(wamrEngine);
+        auto wamr_end = std::chrono::high_resolution_clock::now();
+        auto wamr_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wamr_end - wamr_load).count();
+        
+        std::cout << "  ✓ Load time: " << wamr_load_time << " μs" << std::endl;
+        std::cout << "  ✓ First execution: " << wamr_exec_time << " ns" << std::endl;
+        std::cout << "  ✓ Result: " << wamr_result << std::endl;
+        
+        // Benchmark multiple calls
+        const int iterations = 10000;
+        auto bench_start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < iterations; i++) {
+            wamr_aot_engine_get_sample(wamrEngine);
+        }
+        auto bench_end = std::chrono::high_resolution_clock::now();
+        auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
+        std::cout << "  ✓ " << iterations << " calls: " << total_time << " μs (" 
+                  << (total_time * 1000.0 / iterations) << " ns/call)" << std::endl;
     }
+    std::cout << std::endl;
 
-    // Test the function
-    float aot_result = wamr_aot_engine_get_sample(wamrEngine);
-    std::cout << "AOT get_sample() = " << aot_result << std::endl;
-    std::cout << "✅ WAMR AOT sine oscillator loaded successfully." << std::endl;
+    // ========================================================================
+    // BENCHMARK 2: wasm2c Engine
+    // ========================================================================
+    std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
+    std::cout << "  Engine 2: wasm2c (WASM to C Transpilation)" << std::endl;
+    std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
+    
+    auto wasm2c_start = std::chrono::high_resolution_clock::now();
+    
+    wasm2cEngine = wasm2c_engine_new();
+    if (!wasm2cEngine) {
+        std::cout << "✗ Failed to create wasm2c engine" << std::endl;
+    } else {
+        auto wasm2c_load = std::chrono::high_resolution_clock::now();
+        auto wasm2c_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wasm2c_load - wasm2c_start).count();
+        
+        // Test execution
+        float wasm2c_result = wasm2c_engine_get_sample(wasm2cEngine);
+        auto wasm2c_end = std::chrono::high_resolution_clock::now();
+        auto wasm2c_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wasm2c_end - wasm2c_load).count();
+        
+        std::cout << "  ✓ Load time: " << wasm2c_load_time << " μs" << std::endl;
+        std::cout << "  ✓ First execution: " << wasm2c_exec_time << " ns" << std::endl;
+        std::cout << "  ✓ Result: " << wasm2c_result << std::endl;
+        
+        // Benchmark multiple calls
+        const int iterations = 10000;
+        auto bench_start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < iterations; i++) {
+            wasm2c_engine_get_sample(wasm2cEngine);
+        }
+        auto bench_end = std::chrono::high_resolution_clock::now();
+        auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
+        std::cout << "  ✓ " << iterations << " calls: " << total_time << " μs (" 
+                  << (total_time * 1000.0 / iterations) << " ns/call)" << std::endl;
+    }
+    std::cout << std::endl;
 
-    std::cout << "=== WAMR AOT Loaded for Audio Processing ===" << std::endl;
+    // ========================================================================
+    // BENCHMARK 3: Wasmi Engine
+    // ========================================================================
+    std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
+    std::cout << "  Engine 3: Wasmi (Stack-based Interpreter)" << std::endl;
+    std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
+    
+    auto wasmi_start = std::chrono::high_resolution_clock::now();
+    
+    wasmiEngine = wasmi_engine_new();
+    if (!wasmiEngine) {
+        std::cout << "✗ Failed to create Wasmi engine" << std::endl;
+    } else {
+        wasmiStore = wasmi_store_new(wasmiEngine);
+        if (!wasmiStore) {
+            std::cout << "✗ Failed to create Wasmi store" << std::endl;
+        } else {
+            wasmiModule = wasmi_module_new(wasmiEngine, wasm_bytes, wasm_size);
+            if (!wasmiModule) {
+                std::cout << "✗ Failed to load Wasmi module" << std::endl;
+            } else {
+                wasmiInstance = wasmi_instance_new(wasmiStore, wasmiModule);
+                if (!wasmiInstance) {
+                    std::cout << "✗ Failed to instantiate Wasmi module" << std::endl;
+                } else {
+                    const char* func_name = "get_sample";
+                    wasmiFunc = wasmi_instance_get_func(wasmiStore, wasmiInstance, 
+                                                       (const uint8_t*)func_name, strlen(func_name));
+                    if (!wasmiFunc) {
+                        std::cout << "✗ Failed to get function from Wasmi" << std::endl;
+                    } else {
+                        auto wasmi_load = std::chrono::high_resolution_clock::now();
+                        auto wasmi_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wasmi_load - wasmi_start).count();
+                        
+                        // Test execution
+                        float dummy = 0.0f;
+                        float wasmi_result = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, dummy);
+                        
+                        auto wasmi_end = std::chrono::high_resolution_clock::now();
+                        auto wasmi_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wasmi_end - wasmi_load).count();
+                        
+                        std::cout << "  ✓ Load time: " << wasmi_load_time << " μs" << std::endl;
+                        std::cout << "  ✓ First execution: " << wasmi_exec_time << " ns" << std::endl;
+                        std::cout << "  ✓ Result: " << wasmi_result << std::endl;
+                        
+                        // Benchmark multiple calls
+                        const int iterations = 10000;
+                        auto bench_start = std::chrono::high_resolution_clock::now();
+                        for (int i = 0; i < iterations; i++) {
+                            wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, dummy);
+                        }
+                        auto bench_end = std::chrono::high_resolution_clock::now();
+                        auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
+                        std::cout << "  ✓ " << iterations << " calls: " << total_time << " μs (" 
+                                  << (total_time * 1000.0 / iterations) << " ns/call)" << std::endl;
+                    }
+                }
+            }
+        }
+    }
+    std::cout << std::endl;
+    
+    std::cout << "╔══════════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║  All engines initialized and benchmarked                     ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
+    std::cout << std::endl;
+    juce::JUCEApplication::quit();
 }
 
 void AudioPluginAudioProcessor::releaseResources()

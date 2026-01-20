@@ -2,6 +2,16 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "wamr_aot_wrapper.h"
+#include "wasm2c_wrapper.h"
+
+// Forward declarations for wasmi
+extern "C" {
+    typedef struct WasmiEngine WasmiEngine;
+    typedef struct WasmiStore WasmiStore;
+    typedef struct WasmiModule WasmiModule;
+    typedef struct WasmiInstance WasmiInstance;
+    typedef struct WasmiFunc WasmiFunc;
+}
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -50,6 +60,16 @@ private:
 
     // WAMR AOT engine components
     WamrAotEngine* wamrEngine = nullptr;
+    
+    // WASM2C engine components
+    Wasm2cEngine* wasm2cEngine = nullptr;
+    
+    // Wasmi engine components
+    WasmiEngine* wasmiEngine = nullptr;
+    WasmiStore* wasmiStore = nullptr;
+    WasmiModule* wasmiModule = nullptr;
+    WasmiInstance* wasmiInstance = nullptr;
+    WasmiFunc* wasmiFunc = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

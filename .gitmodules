@@ -7,3 +7,6 @@
 [submodule "include/wamr"]
 	path = include/wamr
 	url = https://github.com/jaffco/wasm-micro-runtime
+[submodule "include/wasm2c-runtime"]
+	path = include/wasm2c-runtime
+	url = https://github.com/jaffco/wasm2c-runtime
