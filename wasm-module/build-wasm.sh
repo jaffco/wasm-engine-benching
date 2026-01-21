@@ -14,7 +14,7 @@ emcc build/module_wrapper.cpp -O2 -o build/module.wasm \
   -I. \
   -sSTANDALONE_WASM \
   -sEXPORTED_RUNTIME_METHODS=[] \
-  -sEXPORTED_FUNCTIONS=_get_sample \
+  -sEXPORTED_FUNCTIONS=_process \
   --no-entry
 
 # Convert WASM binary to C header array
@@ -47,4 +47,4 @@ else
 fi
 
 echo "✓ Built WASM file and generated module_wasm.h"
-echo "✓ Function 'get_sample' exported with C linkage"
+echo "✓ Function 'process' exported with C linkage"

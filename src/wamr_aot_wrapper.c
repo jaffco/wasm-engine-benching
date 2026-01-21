@@ -48,14 +48,14 @@ bool wamr_aot_engine_load_module(WamrAotEngine* engine, const uint8_t* aot_bytes
     engine->exec_env = wasm_runtime_create_exec_env(engine->instance, STACK_SIZE);
     if (!engine->exec_env) return false;
 
-    engine->get_sample_func = wasm_runtime_lookup_function(engine->instance, "get_sample");
-    return engine->get_sample_func != NULL;
+    engine->process_func = wasm_runtime_lookup_function(engine->instance, "process");
+    return engine->process_func != NULL;
 }
 
-float wamr_aot_engine_get_sample(WamrAotEngine* engine, float input) {
-    if (!engine->get_sample_func) {
-        printf("ERROR: get_sample_func is NULL!\n");
-        return 0.0f;
+void wamr_aot_engine_process(WamrAotEngine* engine, float* input, float* output, int num_samples) {
+    if (!engine->process_func) {
+        printf("ERROR: process_func is NULL!\n");
+        return;
     }
 
     // Initialize WAMR thread environment for the calling thread (e.g., audio thread)
@@ -64,27 +64,47 @@ float wamr_aot_engine_get_sample(WamrAotEngine* engine, float input) {
     if (!thread_env_initialized) {
         if (!wasm_runtime_init_thread_env()) {
             printf("ERROR: Failed to initialize WAMR thread environment!\n");
-            return 0.0f;
+            return;
         }
         thread_env_initialized = true;
         printf("Initialized WAMR thread environment for audio processing thread\n");
     }
 
-    // Use the older argv-based call API instead of wasm_val_t
-    uint32_t argv[2];  // Input arg (float as uint32) + return value slot
-    argv[0] = *(uint32_t*)&input;  // Pass input sample as uint32_t representation
+    // Get WASM module's memory instance
+    uint32_t input_offset = wasm_runtime_module_malloc(engine->instance, num_samples * sizeof(float), NULL);
+    uint32_t output_offset = wasm_runtime_module_malloc(engine->instance, num_samples * sizeof(float), NULL);
     
-    // Call the function using the simpler API
-    if (wasm_runtime_call_wasm(engine->exec_env, engine->get_sample_func, 1, argv)) {
-        // Result is in argv[0] as uint32_t representation of float
-        float result = *(float*)&argv[0];
+    if (input_offset == 0 || output_offset == 0) {
+        printf("ERROR: Failed to allocate WASM memory\n");
+        if (input_offset) wasm_runtime_module_free(engine->instance, input_offset);
+        if (output_offset) wasm_runtime_module_free(engine->instance, output_offset);
+        return;
+    }
+    
+    // Get the memory pointer and copy input buffer
+    void* wasm_mem_ptr = wasm_runtime_addr_app_to_native(engine->instance, input_offset);
+    if (wasm_mem_ptr) {
+        memcpy(wasm_mem_ptr, input, num_samples * sizeof(float));
+    }
+    
+    // Call the process function with (input_ptr, output_ptr, num_samples)
+    uint32_t argv[3];
+    argv[0] = input_offset;
+    argv[1] = output_offset;
+    argv[2] = num_samples;
+    
+    if (wasm_runtime_call_wasm(engine->exec_env, engine->process_func, 3, argv)) {
+        // Copy output buffer from WASM memory
+        void* output_mem_ptr = wasm_runtime_addr_app_to_native(engine->instance, output_offset);
+        if (output_mem_ptr) {
+            memcpy(output, output_mem_ptr, num_samples * sizeof(float));
+        }
         
         static int debug_count = 0;
         if (debug_count < 3) {
-            printf("WAMR call succeeded, result = %f\n", result);
+            printf("WAMR process call succeeded\n");
             debug_count++;
         }
-        return result;
     } else {
         static int error_count = 0;
         if (error_count < 1) {
@@ -92,6 +112,9 @@ float wamr_aot_engine_get_sample(WamrAotEngine* engine, float input) {
             printf("ERROR: WAMR call failed! Exception: %s\n", exception ? exception : "none");
             error_count++;
         }
-        return 0.0f;
     }
+    
+    // Free WASM memory
+    wasm_runtime_module_free(engine->instance, input_offset);
+    wasm_runtime_module_free(engine->instance, output_offset);
 }

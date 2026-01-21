@@ -1,7 +1,9 @@
-extern "C" {
+extern "C" {    
 
-float get_sample(float input) {
-    return input * 0.2f;
+void process(float* input, float* output, int num_samples) {
+    for (int i = 0; i < num_samples; i++) {
+        output[i] = input[i] * 0.2f;
+    }
 }
 
 }

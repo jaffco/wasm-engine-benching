@@ -179,21 +179,25 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         auto wamr_load = std::chrono::high_resolution_clock::now();
         auto wamr_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wamr_load - wamr_start).count();
         
-        // Test execution with test input
-        float test_input = 1.0f;
-        float wamr_result = wamr_aot_engine_get_sample(wamrEngine, test_input);
+        // Test execution with test buffer
+        const int test_size = 128;
+        float test_input[test_size];
+        float test_output[test_size];
+        for (int i = 0; i < test_size; i++) test_input[i] = 1.0f;
+        
+        wamr_aot_engine_process(wamrEngine, test_input, test_output, test_size);
         auto wamr_end = std::chrono::high_resolution_clock::now();
         auto wamr_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wamr_end - wamr_load).count();
         
         std::cout << "  ✓ Load time: " << wamr_load_time << " μs" << std::endl;
         std::cout << "  ✓ First execution: " << wamr_exec_time << " ns" << std::endl;
-        std::cout << "  ✓ Result (1.0 * 0.5): " << wamr_result << std::endl;
+        std::cout << "  ✓ Result[0] (1.0 * 0.2): " << test_output[0] << std::endl;
         
         // Benchmark multiple calls
         const int iterations = 10000;
         auto bench_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; i++) {
-            wamr_aot_engine_get_sample(wamrEngine, test_input);
+            wamr_aot_engine_process(wamrEngine, test_input, test_output, test_size);
         }
         auto bench_end = std::chrono::high_resolution_clock::now();
         auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
@@ -218,21 +222,25 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         auto wasm2c_load = std::chrono::high_resolution_clock::now();
         auto wasm2c_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wasm2c_load - wasm2c_start).count();
         
-        // Test execution with test input
-        float test_input = 1.0f;
-        float wasm2c_result = wasm2c_engine_get_sample(wasm2cEngine, test_input);
+        // Test execution with test buffer
+        const int test_size = 128;
+        float test_input[test_size];
+        float test_output[test_size];
+        for (int i = 0; i < test_size; i++) test_input[i] = 1.0f;
+        
+        wasm2c_engine_process(wasm2cEngine, test_input, test_output, test_size);
         auto wasm2c_end = std::chrono::high_resolution_clock::now();
         auto wasm2c_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wasm2c_end - wasm2c_load).count();
         
         std::cout << "  ✓ Load time: " << wasm2c_load_time << " μs" << std::endl;
         std::cout << "  ✓ First execution: " << wasm2c_exec_time << " ns" << std::endl;
-        std::cout << "  ✓ Result (1.0 * 0.5): " << wasm2c_result << std::endl;
+        std::cout << "  ✓ Result[0] (1.0 * 0.2): " << test_output[0] << std::endl;
         
         // Benchmark multiple calls
         const int iterations = 10000;
         auto bench_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; i++) {
-            wasm2c_engine_get_sample(wasm2cEngine, test_input);
+            wasm2c_engine_process(wasm2cEngine, test_input, test_output, test_size);
         }
         auto bench_end = std::chrono::high_resolution_clock::now();
         auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
@@ -266,7 +274,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
                 if (!wasmiInstance) {
                     std::cout << "✗ Failed to instantiate Wasmi module" << std::endl;
                 } else {
-                    const char* func_name = "get_sample";
+                    const char* func_name = "process";
                     wasmiFunc = wasmi_instance_get_func(wasmiStore, wasmiInstance, 
                                                        (const uint8_t*)func_name, strlen(func_name));
                     if (!wasmiFunc) {
@@ -275,22 +283,28 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
                         auto wasmi_load = std::chrono::high_resolution_clock::now();
                         auto wasmi_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wasmi_load - wasmi_start).count();
                         
-                        // Test execution with test input
-                        float test_input = 1.0f;
-                        float wasmi_result = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, test_input);
+                        // Test execution with test buffer
+                        const int test_size = 128;
+                        float test_input[test_size];
+                        float test_output[test_size];
+                        for (int i = 0; i < test_size; i++) test_input[i] = 1.0f;
+                        
+                        int result = wasmi_func_call_buffer_process(wasmiStore, wasmiInstance, wasmiFunc,
+                                                                   test_input, test_output, test_size);
                         
                         auto wasmi_end = std::chrono::high_resolution_clock::now();
                         auto wasmi_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wasmi_end - wasmi_load).count();
                         
                         std::cout << "  ✓ Load time: " << wasmi_load_time << " μs" << std::endl;
                         std::cout << "  ✓ First execution: " << wasmi_exec_time << " ns" << std::endl;
-                        std::cout << "  ✓ Result (1.0 * 0.5): " << wasmi_result << std::endl;
+                        std::cout << "  ✓ Result[0] (1.0 * 0.2): " << test_output[0] << std::endl;
                         
                         // Benchmark multiple calls
                         const int iterations = 10000;
                         auto bench_start = std::chrono::high_resolution_clock::now();
                         for (int i = 0; i < iterations; i++) {
-                            wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, test_input);
+                            wasmi_func_call_buffer_process(wasmiStore, wasmiInstance, wasmiFunc,
+                                                          test_input, test_output, test_size);
                         }
                         auto bench_end = std::chrono::high_resolution_clock::now();
                         auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
@@ -357,52 +371,56 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     int bufferChannels = buffer.getNumChannels();
     int sampleChannels = sampleBuffer.getNumChannels();
 
+    // Allocate temporary buffers for processing
+    float* input_buffer = new float[numSamples];
+    float* output_buffer = new float[numSamples];
+    
+    // Fill input buffer from audio file
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        // Get the audio file sample as input
-        float input_sample = sampleBuffer.getSample(0, currentPosition);
-        
-        // Process with all three engines
-        float wamr_sample = 0.0f;
-        float wasm2c_sample = 0.0f;
-        float wasmi_sample = 0.0f;
-        
-        if (wamrEngine) {
-            wamr_sample = wamr_aot_engine_get_sample(wamrEngine, input_sample);
-        }
-        
-        if (wasm2cEngine) {
-            wasm2c_sample = wasm2c_engine_get_sample(wasm2cEngine, input_sample);
-        }
-        
-        if (wasmiFunc && wasmiStore) {
-            wasmi_sample = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, input_sample);
-        }
-        
-        // Select which engine output to use based on selectedEngine
-        float selected_sample = 0.0f;
-        switch (selectedEngine) {
-            case EngineType::WAMR:
-                selected_sample = wamr_sample;
-                break;
-            case EngineType::Wasm2c:
-                selected_sample = wasm2c_sample;
-                break;
-            case EngineType::Wasmi:
-                selected_sample = wasmi_sample;
-                break;
-            case EngineType::Bypass:
-                selected_sample = input_sample;
-                break;
-        }
-
-        for (int channel = 0; channel < bufferChannels; ++channel)
-        {
-            float* out = buffer.getWritePointer(channel);
-            out[sample] = selected_sample;
-        }
+        input_buffer[sample] = sampleBuffer.getSample(0, currentPosition);
         currentPosition = (currentPosition + 1) % sampleBuffer.getNumSamples();
     }
+    
+    // Process with selected engine
+    switch (selectedEngine) {
+        case EngineType::WAMR:
+            if (wamrEngine) {
+                wamr_aot_engine_process(wamrEngine, input_buffer, output_buffer, numSamples);
+            } else {
+                memcpy(output_buffer, input_buffer, numSamples * sizeof(float));
+            }
+            break;
+        case EngineType::Wasm2c:
+            if (wasm2cEngine) {
+                wasm2c_engine_process(wasm2cEngine, input_buffer, output_buffer, numSamples);
+            } else {
+                memcpy(output_buffer, input_buffer, numSamples * sizeof(float));
+            }
+            break;
+        case EngineType::Wasmi:
+            if (wasmiFunc && wasmiStore) {
+                wasmi_func_call_buffer_process(wasmiStore, wasmiInstance, wasmiFunc,
+                                              input_buffer, output_buffer, numSamples);
+            } else {
+                memcpy(output_buffer, input_buffer, numSamples * sizeof(float));
+            }
+            break;
+        case EngineType::Bypass:
+            memcpy(output_buffer, input_buffer, numSamples * sizeof(float));
+            break;
+    }
+    
+    // Copy processed buffer to all output channels
+    for (int channel = 0; channel < bufferChannels; ++channel)
+    {
+        float* out = buffer.getWritePointer(channel);
+        memcpy(out, output_buffer, numSamples * sizeof(float));
+    }
+    
+    // Free temporary buffers
+    delete[] input_buffer;
+    delete[] output_buffer;
 }
 
 //==============================================================================
