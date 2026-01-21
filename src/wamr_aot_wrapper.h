@@ -15,7 +15,7 @@ typedef struct {
 WamrAotEngine* wamr_aot_engine_new(void);
 void wamr_aot_engine_delete(WamrAotEngine* engine);
 bool wamr_aot_engine_load_module(WamrAotEngine* engine, const uint8_t* aot_bytes, uint32_t size);
-float wamr_aot_engine_get_sample(WamrAotEngine* engine);
+float wamr_aot_engine_get_sample(WamrAotEngine* engine, float input);
 
 #ifdef __cplusplus
 }

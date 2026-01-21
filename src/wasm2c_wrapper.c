@@ -40,7 +40,7 @@ void wasm2c_engine_delete(Wasm2cEngine* engine) {
     free(engine);
 }
 
-float wasm2c_engine_get_sample(Wasm2cEngine* engine) {
+float wasm2c_engine_get_sample(Wasm2cEngine* engine, float input) {
     if (!engine || !engine->instance) {
         printf("ERROR: wasm2c engine or instance is NULL!\n");
         return 0.0f;
@@ -48,8 +48,7 @@ float wasm2c_engine_get_sample(Wasm2cEngine* engine) {
 
     // Call the generated wasm2c function
     // The signature is: f32 w2c_module_get_sample(struct w2c_module*, f32)
-    float dummy = 0.0f;
-    float result = w2c_module_get_sample(engine->instance, dummy);
+    float result = w2c_module_get_sample(engine->instance, input);
     
     return result;
 }

@@ -17,7 +17,8 @@ enum class EngineType
 {
     WAMR = 0,
     Wasm2c,
-    Wasmi
+    Wasmi,
+    Bypass
 };
 
 //==============================================================================
@@ -83,7 +84,7 @@ private:
     WasmiFunc* wasmiFunc = nullptr;
     
     // Engine selection
-    EngineType selectedEngine = EngineType::WAMR;
+    EngineType selectedEngine = EngineType::Bypass;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

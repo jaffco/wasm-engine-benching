@@ -52,7 +52,7 @@ bool wamr_aot_engine_load_module(WamrAotEngine* engine, const uint8_t* aot_bytes
     return engine->get_sample_func != NULL;
 }
 
-float wamr_aot_engine_get_sample(WamrAotEngine* engine) {
+float wamr_aot_engine_get_sample(WamrAotEngine* engine, float input) {
     if (!engine->get_sample_func) {
         printf("ERROR: get_sample_func is NULL!\n");
         return 0.0f;
@@ -72,7 +72,7 @@ float wamr_aot_engine_get_sample(WamrAotEngine* engine) {
 
     // Use the older argv-based call API instead of wasm_val_t
     uint32_t argv[2];  // Input arg (float as uint32) + return value slot
-    argv[0] = 0;       // dummy float argument (0.0f as uint32_t)
+    argv[0] = *(uint32_t*)&input;  // Pass input sample as uint32_t representation
     
     // Call the function using the simpler API
     if (wasm_runtime_call_wasm(engine->exec_env, engine->get_sample_func, 1, argv)) {

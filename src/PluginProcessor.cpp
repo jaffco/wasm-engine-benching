@@ -179,20 +179,21 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         auto wamr_load = std::chrono::high_resolution_clock::now();
         auto wamr_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wamr_load - wamr_start).count();
         
-        // Test execution
-        float wamr_result = wamr_aot_engine_get_sample(wamrEngine);
+        // Test execution with test input
+        float test_input = 1.0f;
+        float wamr_result = wamr_aot_engine_get_sample(wamrEngine, test_input);
         auto wamr_end = std::chrono::high_resolution_clock::now();
         auto wamr_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wamr_end - wamr_load).count();
         
         std::cout << "  ✓ Load time: " << wamr_load_time << " μs" << std::endl;
         std::cout << "  ✓ First execution: " << wamr_exec_time << " ns" << std::endl;
-        std::cout << "  ✓ Result: " << wamr_result << std::endl;
+        std::cout << "  ✓ Result (1.0 * 0.5): " << wamr_result << std::endl;
         
         // Benchmark multiple calls
         const int iterations = 10000;
         auto bench_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; i++) {
-            wamr_aot_engine_get_sample(wamrEngine);
+            wamr_aot_engine_get_sample(wamrEngine, test_input);
         }
         auto bench_end = std::chrono::high_resolution_clock::now();
         auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
@@ -217,20 +218,21 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         auto wasm2c_load = std::chrono::high_resolution_clock::now();
         auto wasm2c_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wasm2c_load - wasm2c_start).count();
         
-        // Test execution
-        float wasm2c_result = wasm2c_engine_get_sample(wasm2cEngine);
+        // Test execution with test input
+        float test_input = 1.0f;
+        float wasm2c_result = wasm2c_engine_get_sample(wasm2cEngine, test_input);
         auto wasm2c_end = std::chrono::high_resolution_clock::now();
         auto wasm2c_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wasm2c_end - wasm2c_load).count();
         
         std::cout << "  ✓ Load time: " << wasm2c_load_time << " μs" << std::endl;
         std::cout << "  ✓ First execution: " << wasm2c_exec_time << " ns" << std::endl;
-        std::cout << "  ✓ Result: " << wasm2c_result << std::endl;
+        std::cout << "  ✓ Result (1.0 * 0.5): " << wasm2c_result << std::endl;
         
         // Benchmark multiple calls
         const int iterations = 10000;
         auto bench_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; i++) {
-            wasm2c_engine_get_sample(wasm2cEngine);
+            wasm2c_engine_get_sample(wasm2cEngine, test_input);
         }
         auto bench_end = std::chrono::high_resolution_clock::now();
         auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
@@ -273,22 +275,22 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
                         auto wasmi_load = std::chrono::high_resolution_clock::now();
                         auto wasmi_load_time = std::chrono::duration_cast<std::chrono::microseconds>(wasmi_load - wasmi_start).count();
                         
-                        // Test execution
-                        float dummy = 0.0f;
-                        float wasmi_result = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, dummy);
+                        // Test execution with test input
+                        float test_input = 1.0f;
+                        float wasmi_result = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, test_input);
                         
                         auto wasmi_end = std::chrono::high_resolution_clock::now();
                         auto wasmi_exec_time = std::chrono::duration_cast<std::chrono::nanoseconds>(wasmi_end - wasmi_load).count();
                         
                         std::cout << "  ✓ Load time: " << wasmi_load_time << " μs" << std::endl;
                         std::cout << "  ✓ First execution: " << wasmi_exec_time << " ns" << std::endl;
-                        std::cout << "  ✓ Result: " << wasmi_result << std::endl;
+                        std::cout << "  ✓ Result (1.0 * 0.5): " << wasmi_result << std::endl;
                         
                         // Benchmark multiple calls
                         const int iterations = 10000;
                         auto bench_start = std::chrono::high_resolution_clock::now();
                         for (int i = 0; i < iterations; i++) {
-                            wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, dummy);
+                            wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, test_input);
                         }
                         auto bench_end = std::chrono::high_resolution_clock::now();
                         auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(bench_end - bench_start).count();
@@ -357,21 +359,24 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
+        // Get the audio file sample as input
+        float input_sample = sampleBuffer.getSample(0, currentPosition);
+        
         // Process with all three engines
         float wamr_sample = 0.0f;
         float wasm2c_sample = 0.0f;
         float wasmi_sample = 0.0f;
         
         if (wamrEngine) {
-            wamr_sample = wamr_aot_engine_get_sample(wamrEngine);
+            wamr_sample = wamr_aot_engine_get_sample(wamrEngine, input_sample);
         }
         
         if (wasm2cEngine) {
-            wasm2c_sample = wasm2c_engine_get_sample(wasm2cEngine);
+            wasm2c_sample = wasm2c_engine_get_sample(wasm2cEngine, input_sample);
         }
         
         if (wasmiFunc && wasmiStore) {
-            wasmi_sample = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, 0.0f);
+            wasmi_sample = wasmi_func_call_f32_to_f32(wasmiStore, wasmiFunc, input_sample);
         }
         
         // Select which engine output to use based on selectedEngine
@@ -386,14 +391,15 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             case EngineType::Wasmi:
                 selected_sample = wasmi_sample;
                 break;
+            case EngineType::Bypass:
+                selected_sample = input_sample;
+                break;
         }
 
         for (int channel = 0; channel < bufferChannels; ++channel)
         {
             float* out = buffer.getWritePointer(channel);
-            float sampleValue = sampleBuffer.getSample(channel % sampleChannels, currentPosition) * 0.f;
-            float finalSample = sampleValue + selected_sample * 0.2f;
-            out[sample] += finalSample;
+            out[sample] = selected_sample;
         }
         currentPosition = (currentPosition + 1) % sampleBuffer.getNumSamples();
     }

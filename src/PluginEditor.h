@@ -24,6 +24,7 @@ private:
     juce::TextButton wamrButton;
     juce::TextButton wasm2cButton;
     juce::TextButton wasmiButton;
+    juce::TextButton bypassButton;
     
     juce::Label titleLabel;
 

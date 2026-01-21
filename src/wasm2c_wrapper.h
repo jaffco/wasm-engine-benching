@@ -13,7 +13,7 @@ typedef struct {
 
 Wasm2cEngine* wasm2c_engine_new(void);
 void wasm2c_engine_delete(Wasm2cEngine* engine);
-float wasm2c_engine_get_sample(Wasm2cEngine* engine);
+float wasm2c_engine_get_sample(Wasm2cEngine* engine, float input);
 
 #ifdef __cplusplus
 }
