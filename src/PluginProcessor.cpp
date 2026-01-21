@@ -183,7 +183,8 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         const int test_size = 128;
         float test_input[test_size];
         float test_output[test_size];
-        for (int i = 0; i < test_size; i++) test_input[i] = 1.0f;
+        juce::Random random;
+        for (int i = 0; i < test_size; i++) test_input[i] = random.nextFloat() * 2.0f - 1.0f;
         
         wamr_aot_engine_process(wamrEngine, test_input, test_output, test_size);
         auto wamr_end = std::chrono::high_resolution_clock::now();
@@ -226,7 +227,8 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         const int test_size = 128;
         float test_input[test_size];
         float test_output[test_size];
-        for (int i = 0; i < test_size; i++) test_input[i] = 1.0f;
+        juce::Random random;
+        for (int i = 0; i < test_size; i++) test_input[i] = random.nextFloat() * 2.0f - 1.0f;
         
         wasm2c_engine_process(wasm2cEngine, test_input, test_output, test_size);
         auto wasm2c_end = std::chrono::high_resolution_clock::now();
@@ -287,7 +289,8 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
                         const int test_size = 128;
                         float test_input[test_size];
                         float test_output[test_size];
-                        for (int i = 0; i < test_size; i++) test_input[i] = 1.0f;
+                        juce::Random random;
+                        for (int i = 0; i < test_size; i++) test_input[i] = random.nextFloat() * 2.0f - 1.0f;
                         
                         int result = wasmi_func_call_buffer_process(wasmiStore, wasmiInstance, wasmiFunc,
                                                                    test_input, test_output, test_size);
