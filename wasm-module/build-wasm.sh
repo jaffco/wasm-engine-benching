@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# bail out on any failed process
+set -e
+
 # Create local build directory
 mkdir -p build
 
