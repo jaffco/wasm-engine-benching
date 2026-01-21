@@ -13,6 +13,13 @@ extern "C" {
     typedef struct WasmiFunc WasmiFunc;
 }
 
+enum class EngineType
+{
+    WAMR = 0,
+    Wasm2c,
+    Wasmi
+};
+
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
 {
@@ -53,6 +60,10 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    //==============================================================================
+    EngineType getSelectedEngine() const { return selectedEngine; }
+    void setSelectedEngine(EngineType engine) { selectedEngine = engine; }
+
 private:
     //==============================================================================
     juce::AudioBuffer<float> sampleBuffer;
@@ -70,6 +81,9 @@ private:
     WasmiModule* wasmiModule = nullptr;
     WasmiInstance* wasmiInstance = nullptr;
     WasmiFunc* wasmiFunc = nullptr;
+    
+    // Engine selection
+    EngineType selectedEngine = EngineType::WAMR;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

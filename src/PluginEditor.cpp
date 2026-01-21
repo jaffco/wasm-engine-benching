@@ -5,9 +5,34 @@
 AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p)
 {
-    juce::ignoreUnused (processorRef);
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
+    // Title label
+    titleLabel.setText ("WASM Engine Selection", juce::dontSendNotification);
+    titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
+    titleLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (titleLabel);
+    
+    // Setup WAMR button
+    wamrButton.setButtonText ("WAMR AOT");
+    wamrButton.setClickingTogglesState (true);
+    wamrButton.setRadioGroupId (1001);
+    wamrButton.setToggleState (true, juce::dontSendNotification);
+    wamrButton.addListener (this);
+    addAndMakeVisible (wamrButton);
+    
+    // Setup wasm2c button
+    wasm2cButton.setButtonText ("wasm2c");
+    wasm2cButton.setClickingTogglesState (true);
+    wasm2cButton.setRadioGroupId (1001);
+    wasm2cButton.addListener (this);
+    addAndMakeVisible (wasm2cButton);
+    
+    // Setup Wasmi button
+    wasmiButton.setButtonText ("Wasmi");
+    wasmiButton.setClickingTogglesState (true);
+    wasmiButton.setRadioGroupId (1001);
+    wasmiButton.addListener (this);
+    addAndMakeVisible (wasmiButton);
+    
     setSize (400, 300);
 }
 
@@ -18,16 +43,36 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 //==============================================================================
 void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-
-    g.setColour (juce::Colours::white);
-    g.setFont (15.0f);
-    g.drawFittedText ("Hello World!", getLocalBounds(), juce::Justification::centred, 1);
 }
 
 void AudioPluginAudioProcessorEditor::resized()
 {
-    // This is generally where you'll want to lay out the positions of any
-    // subcomponents in your editor..
+    auto area = getLocalBounds().reduced (20);
+    
+    titleLabel.setBounds (area.removeFromTop (40));
+    area.removeFromTop (20); // spacing
+    
+    auto buttonHeight = 50;
+    wamrButton.setBounds (area.removeFromTop (buttonHeight));
+    area.removeFromTop (10); // spacing
+    wasm2cButton.setBounds (area.removeFromTop (buttonHeight));
+    area.removeFromTop (10); // spacing
+    wasmiButton.setBounds (area.removeFromTop (buttonHeight));
+}
+
+void AudioPluginAudioProcessorEditor::buttonClicked (juce::Button* button)
+{
+    if (button == &wamrButton)
+    {
+        processorRef.setSelectedEngine (EngineType::WAMR);
+    }
+    else if (button == &wasm2cButton)
+    {
+        processorRef.setSelectedEngine (EngineType::Wasm2c);
+    }
+    else if (button == &wasmiButton)
+    {
+        processorRef.setSelectedEngine (EngineType::Wasmi);
+    }
 }
