@@ -9,6 +9,8 @@
 #include <iostream>
 #include <chrono>
 
+#define BENCHMARK_ITERATIONS 100
+
 // Wasmi C API
 extern "C" {
     #include "wasmi_daisy.h"
@@ -195,7 +197,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         std::cout << "  ✓ Result[0] (1.0 * 0.2): " << test_output[0] << std::endl;
         
         // Benchmark multiple calls
-        const int iterations = 10000;
+        const int iterations = BENCHMARK_ITERATIONS;
         auto bench_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; i++) {
             wamr_aot_engine_process(wamrEngine, test_input, test_output, test_size);
@@ -239,7 +241,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         std::cout << "  ✓ Result[0] (1.0 * 0.2): " << test_output[0] << std::endl;
         
         // Benchmark multiple calls
-        const int iterations = 10000;
+        const int iterations = BENCHMARK_ITERATIONS;
         auto bench_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; i++) {
             wasm2c_engine_process(wasm2cEngine, test_input, test_output, test_size);
@@ -303,7 +305,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
                         std::cout << "  ✓ Result[0] (1.0 * 0.2): " << test_output[0] << std::endl;
                         
                         // Benchmark multiple calls
-                        const int iterations = 10000;
+                        const int iterations = BENCHMARK_ITERATIONS;
                         auto bench_start = std::chrono::high_resolution_clock::now();
                         for (int i = 0; i < iterations; i++) {
                             wasmi_func_call_buffer_process(wasmiStore, wasmiInstance, wasmiFunc,
